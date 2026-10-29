@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/db/prisma';
+import { ensureSelfProfile } from '../../lib/patients/ensureSelfProfile';
 import { hashPassword } from '../../lib/auth/password';
 import { patientRegisterSchema } from '../../lib/validations/auth';
 import type { ZodIssue } from 'zod';
@@ -54,6 +55,8 @@ export async function registerPatientService(input: RegisterPatientInput) {
       updated_at: true,
     },
   });
+
+  await ensureSelfProfile({ id: user.id, full_name: user.full_name, email: user.email, phone: user.phone });
 
   return {
     success: true,

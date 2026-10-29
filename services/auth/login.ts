@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/db/prisma';
+import { ensureSelfProfile } from '../../lib/patients/ensureSelfProfile';
 import { verifyPassword } from '../../lib/auth/password';
 import { loginSchema } from '../../lib/validations/auth';
 import type { SessionUser } from '../../lib/auth/session';
@@ -44,12 +45,17 @@ export async function loginService(input: LoginInput): Promise<LoginResult> {
     throw new Error('Invalid email or password.');
   }
 
+  const selfProfile = user.role === 'patient'
+    ? await ensureSelfProfile({ id: user.id, full_name: user.full_name, email: user.email, phone: user.phone })
+    : null;
+
   // 4. Construct safe user payload
   const safeUser: SessionUser = {
     id: user.id,
     full_name: user.full_name,
     email: user.email,
     phone: user.phone,
+    ...(selfProfile ? { onboardedAt: selfProfile.onboardedAt ? new Date(selfProfile.onboardedAt).toISOString() : null } : {}),
     role: user.role as 'patient' | 'doctor' | 'admin',
     doctor_profile: user.doctor_profile
       ? {

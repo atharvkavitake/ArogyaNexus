@@ -15,6 +15,15 @@ import { readRecordMultipart, detectRecordMime } from './multipart';
 import { recordPath, removeRecord, storeRecord } from './recordStorage';
 import path from 'node:path';
 import { vitalRangeStart, recordCategoryFilter } from '../lib/records/logic';
+import {
+  computeProfileCompleteness,
+  patientProfileCreateSchema,
+  patientProfilePatchSchema,
+  ProfileAccessError,
+  requireProfile,
+  softDeletePatientProfile,
+} from '../lib/patients/profileService';
+import { ensureSelfProfile } from '../lib/patients/ensureSelfProfile';
 
 dotenv.config();
 
@@ -135,6 +144,125 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
     success: true,
     user: session.user,
   });
+});
+
+function patientProfileDto(profile: any) {
+  return {
+    id: profile.id,
+    name: profile.name,
+    relation: profile.relation,
+    dateOfBirth: profile.dateOfBirth,
+    sex: profile.sex,
+    bloodGroup: profile.bloodGroup,
+    phone: profile.phone,
+    email: profile.email,
+    allergies: profile.allergies || [],
+    conditions: profile.conditions || [],
+    allergiesConfirmed: Boolean(profile.allergiesConfirmed),
+    conditionsConfirmed: Boolean(profile.conditionsConfirmed),
+    onboardingStep: profile.onboardingStep || 1,
+    onboardedAt: profile.onboardedAt,
+    completeness: computeProfileCompleteness(profile),
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+}
+
+function patientSession(req: Request, res: Response) {
+  const session = getSession(req.cookies[SESSION_COOKIE_NAME]);
+  if (!session) { res.status(401).json({ error: 'Authentication required.' }); return null; }
+  if (session.user.role !== 'patient') { res.status(403).json({ error: 'Patient access required.' }); return null; }
+  return session;
+}
+
+function sendProfileError(res: Response, error: unknown) {
+  if (error instanceof ProfileAccessError) { res.status(error.status).json({ error: error.message }); return; }
+  console.error('[Patient profiles] Request failed:', error);
+  res.status(500).json({ error: 'Could not process the patient profile request.' });
+}
+
+app.get('/api/patients', async (req: Request, res: Response) => {
+  const session = patientSession(req, res); if (!session) return;
+  const query = z.object({ profileId: z.string().min(1).optional() }).strict().safeParse(req.query);
+  if (!query.success) { res.status(400).json({ error: 'Invalid profile query.' }); return; }
+  try {
+    const self = await ensureSelfProfile({ id: session.user.id, full_name: session.user.full_name, email: session.user.email, phone: session.user.phone });
+    if (query.data.profileId) await requireProfile(query.data.profileId, session.user.id);
+    const patient = await prisma.patient.findUnique({ where: { userId: session.user.id } });
+    const profiles = await prisma.profile.findMany({ where: { patientId: patient.id, deletedAt: null }, orderBy: { createdAt: 'asc' } });
+    if (!profiles.some((profile: any) => profile.id === self.id)) profiles.unshift(self);
+    res.json({ profiles: profiles.map(patientProfileDto) });
+  } catch (error) { sendProfileError(res, error); }
+});
+
+app.post('/api/patients', async (req: Request, res: Response) => {
+  const session = patientSession(req, res); if (!session) return;
+  const query = z.object({ profileId: z.string().min(1).optional() }).strict().safeParse(req.query);
+  const input = patientProfileCreateSchema.safeParse(req.body);
+  if (!query.success || !input.success) { res.status(400).json({ error: 'Invalid patient profile details.', details: input.success ? undefined : input.error.flatten() }); return; }
+  try {
+    if (query.data.profileId) await requireProfile(query.data.profileId, session.user.id);
+    const self = await ensureSelfProfile({ id: session.user.id, full_name: session.user.full_name, email: session.user.email, phone: session.user.phone });
+    const patient = await prisma.patient.findUnique({ where: { userId: session.user.id } });
+    const profile = await prisma.profile.create({ data: {
+      patientId: patient.id,
+      ...input.data,
+      dateOfBirth: input.data.dateOfBirth ? new Date(input.data.dateOfBirth) : null,
+      allergies: [...new Set(input.data.allergies || [])],
+      conditions: [...new Set(input.data.conditions || [])],
+    } });
+    await prisma.profileAccess.create({ data: { profileId: profile.id, userId: session.user.id, scope: 'OWNER' } });
+    for (const field of Object.keys(input.data)) await prisma.profileChangeLog.create({ data: { profileId: profile.id, changedBy: session.user.id, field } });
+    res.status(201).json({ profile: patientProfileDto(profile), ownerProfileId: self.id });
+  } catch (error) { sendProfileError(res, error); }
+});
+
+app.get('/api/patients/:id', async (req: Request, res: Response) => {
+  const session = patientSession(req, res); if (!session) return;
+  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
+  if (!query.success || query.data.profileId !== req.params.id) { res.status(400).json({ error: 'A matching profileId is required.' }); return; }
+  try { res.json({ profile: patientProfileDto(await requireProfile(String(req.params.id), session.user.id)) }); }
+  catch (error) { sendProfileError(res, error); }
+});
+
+app.patch('/api/patients/:id', async (req: Request, res: Response) => {
+  const session = patientSession(req, res); if (!session) return;
+  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
+  const input = patientProfilePatchSchema.safeParse(req.body);
+  if (!query.success || query.data.profileId !== req.params.id || !input.success) { res.status(400).json({ error: 'Invalid patient profile update.', details: input.success ? undefined : input.error.flatten() }); return; }
+  try {
+    const current = await requireProfile(String(req.params.id), session.user.id);
+    if (input.data.relation && (String(current.relation).toUpperCase() === 'SELF' ? input.data.relation.toUpperCase() !== 'SELF' : input.data.relation.toUpperCase() === 'SELF')) {
+      res.status(400).json({ error: 'A profile relationship cannot be changed to or from Self.' }); return;
+    }
+    const data: Record<string, any> = { ...input.data };
+    if (typeof data.dateOfBirth === 'string') data.dateOfBirth = new Date(data.dateOfBirth);
+    if (data.allergies) data.allergies = [...new Set(data.allergies)];
+    if (data.conditions) data.conditions = [...new Set(data.conditions)];
+    const nextOnboardingStep = data.onboardingStep;
+    delete data.onboardingStep;
+    const changedFields = Object.keys(data).filter((field) => JSON.stringify((current as any)[field] ?? null) !== JSON.stringify(data[field] ?? null));
+    if (nextOnboardingStep !== undefined && nextOnboardingStep !== current.onboardingStep) changedFields.push('onboardingStep');
+    if (nextOnboardingStep !== undefined) data.onboardingStep = nextOnboardingStep;
+    const completesOnboarding = nextOnboardingStep === 3
+      && (data.allergiesConfirmed ?? current.allergiesConfirmed) === true
+      && (data.conditionsConfirmed ?? current.conditionsConfirmed) === true;
+    if (completesOnboarding && !current.onboardedAt) { data.onboardedAt = new Date(); changedFields.push('onboardedAt'); }
+    const updated = await prisma.profile.update({ where: { id: current.id }, data });
+    for (const field of [...new Set(changedFields)]) await prisma.profileChangeLog.create({ data: { profileId: current.id, changedBy: session.user.id, field } });
+    res.json({ profile: patientProfileDto(updated) });
+  } catch (error) { sendProfileError(res, error); }
+});
+
+app.delete('/api/patients/:id', async (req: Request, res: Response) => {
+  const session = patientSession(req, res); if (!session) return;
+  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
+  if (!query.success || query.data.profileId !== req.params.id) { res.status(400).json({ error: 'A matching profileId is required.' }); return; }
+  try {
+    const profile = await requireProfile(String(req.params.id), session.user.id);
+    await softDeletePatientProfile(profile, session.user.id);
+    res.json({ success: true });
+  } catch (error) { sendProfileError(res, error); }
 });
 
 // Admin-only doctor application review

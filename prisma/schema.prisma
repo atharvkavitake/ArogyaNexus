@@ -63,6 +63,7 @@ enum RecordCategory {
 }
 
 enum AccessScope {
+  OWNER
   PROFILE
   RECORDS
   APPOINTMENTS
@@ -235,7 +236,18 @@ model Profile {
   patientId    String             @map("patient_id") @db.Uuid
   name         String
   relation     String             @default("SELF")
+  dateOfBirth  DateTime?          @map("date_of_birth")
+  sex          String?
+  bloodGroup   String?            @map("blood_group")
+  phone        String?
+  email        String?
   allergies    String[]           @default([])
+  conditions   String[]           @default([])
+  allergiesConfirmed  Boolean     @default(false) @map("allergies_confirmed")
+  conditionsConfirmed Boolean     @default(false) @map("conditions_confirmed")
+  onboardingStep      Int         @default(1) @map("onboarding_step")
+  onboardedAt  DateTime?          @map("onboarded_at")
+  deletedAt    DateTime?          @map("deleted_at")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
   patient      Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
