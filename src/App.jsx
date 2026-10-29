@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useState, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useState, useCallback, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterSelectPage from './pages/RegisterSelectPage';
 import PatientRegisterPage from './pages/PatientRegisterPage';
@@ -27,6 +27,7 @@ const MedicinesPage = lazy(() => import('./pages/patient/Medicines'));
 const DocumentsPage = lazy(() => import('./pages/patient/Documents'));
 const CampsPage = lazy(() => import('./pages/patient/Camps'));
 const DoctorAppointments = lazy(() => import('./pages/doctor/Appointments'));
+const PatientOnboarding = lazy(() => import('./pages/patient/Onboarding'));
 const DoctorConsultationPlaceholder = lazy(() => import('./pages/doctor/Placeholders').then((module) => ({ default: module.ConsultationPlaceholder })));
 const DoctorRecordsPlaceholder = lazy(() => import('./pages/doctor/Placeholders').then((module) => ({ default: module.MedicalRecordsPlaceholder })));
 import './styles/auth.css';
@@ -97,5 +98,17 @@ function PatientProtectedRoute({ user }) {
     <Route path="book/:doctorId" element={<BookAppointment />} />
     <Route path="appointments/:id/call" element={<AppointmentCallPlaceholder />} />
     <Route path="*" element={<NotFound patient />} />
-  </Routes></ActiveProfileProvider>;
+  </Routes></PatientProfileGate></ActiveProfileProvider>;
+}
+
+function PatientProfileGate({ children }) {
+  const { profiles, loading, error, refreshProfiles } = useActiveProfile();
+  const location = useLocation();
+  if (loading) return <div className="patient-route-loading" role="status">Loading your health profiles…</div>;
+  if (error) return <main className="patient-route-loading"><p role="alert">{error}</p><button type="button" onClick={() => refreshProfiles().catch(() => {})}>Try again</button></main>;
+  const selfProfile = profiles.find((profile) => profile.relation === 'SELF');
+  const onOnboarding = location.pathname === '/patient/onboarding';
+  if (!selfProfile?.onboardedAt && !onOnboarding) return <Navigate to="/patient/onboarding" replace />;
+  if (selfProfile?.onboardedAt && onOnboarding) return <Navigate to="/patient/dashboard" replace />;
+  return children;
 }

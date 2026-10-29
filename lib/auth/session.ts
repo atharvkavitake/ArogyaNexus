@@ -7,6 +7,7 @@ export interface SessionUser {
   email: string;
   role: 'patient' | 'doctor' | 'admin';
   phone: string | null;
+  onboardedAt?: string | null;
   doctor_profile?: {
     id: string;
     speciality: string;

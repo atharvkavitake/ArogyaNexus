@@ -23,6 +23,20 @@ vi.mock('../../lib/db/prisma', () => {
         findUnique: vi.fn(),
         create: vi.fn(),
       },
+      patient: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'patient-1' }),
+        create: vi.fn().mockResolvedValue({ id: 'patient-1' }),
+      },
+      profile: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'profile-1', onboardedAt: null }),
+        create: vi.fn().mockResolvedValue({ id: 'profile-1', onboardedAt: null }),
+      },
+      profileAccess: {
+        findFirst: vi.fn().mockResolvedValue({ scope: 'OWNER' }),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+      profileChangeLog: { create: vi.fn() },
       $transaction: vi.fn(),
     },
   };

@@ -20,7 +20,7 @@ export default function PatientDashboard() {
   const error = !loading && resource.status === 'error';
   const data = resource.data || { profile: { ...activeProfile, allergies: [], completion: 0 }, actions: [], nextAppointment: null, medicinesToday: [], recentVisits: [], consent: { activeCount: 0, lastViewedAt: null }, camps: [], documents: [] };
   const state = loading ? 'loading' : error ? 'error' : undefined;
-  return <PatientLayout profile={loading ? activeProfile : data?.profile || activeProfile}><div className="patient-content">
+  return <PatientLayout profile={activeProfile}><div className="patient-content">
     {activeProfile.id !== 'me' && <div className={`active-profile-banner ${activeProfile.color}`}><UsersIcon /> Viewing <strong>{activeProfile.name}’s</strong> health profile <span>· Only you can manage this profile</span></div>}
     <div className="patient-dashboard-heading"><div><p>YOUR HEALTH, IN ONE PLACE</p><h2>Your health dashboard</h2></div><span><CalendarDays size={16} /> Tuesday, 27 October 2026</span></div>
     {!state && <ActionStrip actions={data.actions} />}
