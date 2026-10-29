@@ -8,7 +8,18 @@ import { getDoctors } from '../../api/doctors';
 import '../../styles/patient-doctors.css';
 import '../../styles/patient-family-settings.css';
 
-const specialities = ['Cardiology', 'Dermatology', 'Endocrinology', 'Paediatrics'];
+const specialities = [
+  'Cardiology',
+  'Dermatology',
+  'Endocrinology',
+  'Paediatrics',
+  'General Medicine',
+  'Neurology',
+  'Orthopaedics',
+  'Ophthalmology',
+  'ENT',
+  'Psychiatry',
+];
 export default function DoctorDirectory() {
   const { activeProfile } = useActiveProfile();
   const [query, setQuery] = useState(''); const [location, setLocation] = useState(''); const [speciality, setSpeciality] = useState('');
@@ -26,7 +37,7 @@ export default function DoctorDirectory() {
     <form className="doctor-filter-card patient-card doctor-filter-expanded" onSubmit={submit} aria-label="Find doctors">
       <label className="doctor-search-field"><span>Search doctors or clinics</span><span className="doctor-search-input"><Search size={17}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Name, speciality, or clinic"/></span></label>
       <label><span>Speciality</span><select value={speciality} onChange={(e)=>setSpeciality(e.target.value)}><option value="">All specialities</option>{specialities.map((item)=><option key={item}>{item}</option>)}</select></label>
-      <label><span>Location</span><span className="doctor-location-control"><select value={location} onChange={(e)=>setLocation(e.target.value)}><option value="">All locations</option><option value="bengaluru">Bengaluru</option><option value="mysuru">Mysuru</option></select><button type="button" title="Use my location" onClick={useMyLocation}><Navigation size={14}/></button></span></label>
+      <label><span>Location</span><span className="doctor-location-control"><select value={location} onChange={(e)=>setLocation(e.target.value)}><option value="">All locations</option><option value="bengaluru">Bengaluru</option><option value="pune">Pune</option><option value="mysuru">Mysuru</option></select><button type="button" title="Use my location" onClick={useMyLocation}><Navigation size={14}/></button></span></label>
       <label><span>Distance</span><select name="distance" defaultValue=""><option value="">Any distance</option><option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="25">Within 25 km</option></select></label>
       <label><span>Max fee</span><select name="maxFee" defaultValue=""><option value="">Any fee</option><option value="800">₹800</option><option value="1000">₹1,000</option><option value="1500">₹1,500</option></select></label>
       <label><span>Minimum rating</span><select name="minRating" defaultValue=""><option value="">Any rating</option><option value="4.5">4.5+</option><option value="4.8">4.8+</option></select></label>
