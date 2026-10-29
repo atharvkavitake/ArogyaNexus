@@ -7,6 +7,16 @@ All IDs and timestamps are strings; dates are ISO 8601. Every function is profil
 | Endpoint | Response | Access |
 |---|---|---|
 | `GET /api/v1/health` | `{data:{status:"ok",database:"connected"}}` or `{code,message}` | Public liveness and database connectivity check |
+| `GET /api/v1/auth/csrf` | `{data:{csrfToken}}` | Public; initializes the CSRF cookie used on mutations |
+| `POST /api/v1/auth/register` | `{data:{user}}` | Rate limited; patient or doctor registration, Zod validated |
+| `POST /api/v1/auth/login` | `{data:{user,doctorStatus?}}` | Rate limited; generic credential failures, creates a database session |
+| `POST /api/v1/auth/logout` | `{data:{loggedOut:true}}` | Authenticated; revokes current database session |
+| `GET /api/v1/auth/me` | `{data:{user}}` | Authenticated current user |
+| `POST /api/v1/auth/change-password` | `{data:{passwordChanged:true}}` | Authenticated; requires current password and revokes other sessions |
+
+Auth mutations require the `X-CSRF-Token` header matching the `arogyanexus_csrf`
+cookie. The session cookie is HTTP-only, SameSite=Lax, and Secure in production.
+Roles are `PATIENT`, `DOCTOR`, `NURSE`, `LAB_TECH`, `RECEPTIONIST`, and `ADMIN`.
 
 | Page | API function and response | Query/input | Planned Prisma source |
 |---|---|---|---|

@@ -12,6 +12,7 @@ import Toast from './components/auth/Toast';
 import AppErrorBoundary from './components/ui/AppErrorBoundary';
 import NotFound from './pages/NotFound';
 import { ActiveProfileProvider } from './contexts/ActiveProfileContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 const PatientDashboard = lazy(() => import('./pages/patient/Dashboard'));
 const DoctorDirectory = lazy(() => import('./pages/patient/DoctorDirectory'));
 const DoctorProfile = lazy(() => import('./pages/patient/DoctorProfile'));
@@ -64,25 +65,24 @@ export default function App() {
         <Route path="/register/doctor" element={<DoctorRegisterPage onToast={addToast} />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage onToast={addToast} />} />
         <Route path="/reset-password" element={<ResetPasswordPage onToast={addToast} />} />
-        <Route path="/patient/*" element={<PatientProtectedRoute />} />
-        <Route path="/doctor/dashboard" element={<DashboardPage role="doctor" />} />
-        <Route path="/doctor/appointments" element={<DoctorAppointments />} />
-        <Route path="/doctor/consult/:appointmentId" element={<DoctorConsultationPlaceholder />} />
-        <Route path="/doctor/records/:patientId" element={<DoctorRecordsPlaceholder />} />
-        <Route path="/doctor/:section" element={<DoctorAppointments comingSoon />} />
-        <Route path="/admin/dashboard" element={<DashboardPage role="admin" />} />
+        <Route path="/patient/*" element={<ProtectedRoute roles={['PATIENT']}>{(user) => <PatientProtectedRoute user={user} />}</ProtectedRoute>} />
+        <Route path="/doctor/dashboard" element={<ProtectedRoute roles={['DOCTOR']}><DashboardPage role="doctor" /></ProtectedRoute>} />
+        <Route path="/doctor/appointments" element={<ProtectedRoute roles={['DOCTOR']}><DoctorAppointments /></ProtectedRoute>} />
+        <Route path="/doctor/consult/:appointmentId" element={<ProtectedRoute roles={['DOCTOR']}><DoctorConsultationPlaceholder /></ProtectedRoute>} />
+        <Route path="/doctor/records/:patientId" element={<ProtectedRoute roles={['DOCTOR']}><DoctorRecordsPlaceholder /></ProtectedRoute>} />
+        <Route path="/doctor/:section" element={<ProtectedRoute roles={['DOCTOR']}><DoctorAppointments comingSoon /></ProtectedRoute>} />
+        <Route path="/staff/dashboard" element={<ProtectedRoute roles={['NURSE', 'LAB_TECH', 'RECEPTIONIST']}><DashboardPage role="staff" /></ProtectedRoute>} />
+        <Route path="/admin/dashboard" element={<ProtectedRoute roles={['ADMIN']}><DashboardPage role="admin" /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes></Suspense>
     </AppErrorBoundary></BrowserRouter>
   );
 }
 
-function PatientProtectedRoute() {
-  const fakeUser = { id: 'demo-patient', full_name: 'Rahul K.', role: 'patient' };
-  if (fakeUser.role !== 'patient') return <Navigate to="/login" replace />;
+function PatientProtectedRoute({ user }) {
   return <ActiveProfileProvider><Routes>
     <Route index element={<Navigate to="dashboard" replace />} />
-    <Route path="dashboard" element={<PatientDashboard user={fakeUser} />} />
+    <Route path="dashboard" element={<PatientDashboard user={user} />} />
     <Route path="doctors" element={<DoctorDirectory />} />
     <Route path="doctors/:doctorId" element={<DoctorProfile />} />
     <Route path="book-appointment/:doctorId" element={<BookAppointment />} />

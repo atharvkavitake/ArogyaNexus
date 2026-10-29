@@ -23,14 +23,15 @@ describe.skipIf(!integration)('database migrations and demo seed', () => {
       prisma.user.findUnique({ where: { email: 'doctor@arogyanexus.test' } }),
       prisma.user.findUnique({ where: { email: 'nurse@arogyanexus.test' } }),
       prisma.user.findUnique({ where: { email: 'admin@arogyanexus.test' } }),
-      prisma.user.count({ where: { role: 'doctor' } }),
+      prisma.user.count({ where: { role: 'DOCTOR' } }),
     ]);
-    expect(patient?.role).toBe('patient');
-    expect(doctor?.role).toBe('doctor');
-    expect(nurse?.role).toBe('nurse');
-    expect(admin?.role).toBe('admin');
+    expect(patient?.role).toBe('PATIENT');
+    expect(doctor?.role).toBe('DOCTOR');
+    expect(nurse?.role).toBe('NURSE');
+    expect(admin?.role).toBe('ADMIN');
     expect(doctors).toBeGreaterThanOrEqual(7);
   }, 120_000);
 });
 
 afterAll(async () => disconnect?.());
+
