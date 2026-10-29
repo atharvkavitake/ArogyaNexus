@@ -12,6 +12,11 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:reset": "tsx prisma/reset.ts",
     "db:seed:appointments": "tsx prisma/seed-appointments.ts",
     "db:seed:records": "tsx prisma/seed-records.ts"
   },
@@ -38,10 +43,12 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
+    "jsdom": "^29.1.1",
     "oxlint": "^1.88.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

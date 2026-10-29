@@ -8,6 +8,7 @@ import { loginService } from '../services/auth/login';
 import { logoutService } from '../services/auth/logout';
 import { createSession, getSession, SESSION_COOKIE_NAME } from '../lib/auth/session';
 import { prisma } from '../lib/db/prisma';
+import { prisma as database } from '../src/db/client';
 import { z } from 'zod';
 import { canAccessProfile } from '../lib/auth/profileAccess';
 import { readRecordMultipart, detectRecordMime } from './multipart';
@@ -55,6 +56,15 @@ app.use(
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'ArogyaNexus Auth API' });
+});
+
+app.get('/api/v1/health', async (_req: Request, res: Response) => {
+  try {
+    await database.$queryRaw`SELECT 1`;
+    res.status(200).json({ data: { status: 'ok', database: 'connected' } });
+  } catch {
+    res.status(503).json({ code: 'DATABASE_UNAVAILABLE', message: 'Database is unavailable.' });
+  }
 });
 
 // Patient Registration Endpoint (Section 6)
