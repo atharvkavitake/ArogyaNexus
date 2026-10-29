@@ -1,5 +1,9 @@
+import { getCsrfToken } from './auth.js';
+
 async function request(path, options = {}) {
-  const response = await fetch(path, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (['POST', 'PATCH', 'DELETE'].includes(options.method)) headers['X-CSRF-Token'] = await getCsrfToken();
+  const response = await fetch(path, { credentials: 'include', ...options, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || 'Could not load appointments.');
   return payload;

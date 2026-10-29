@@ -26,6 +26,13 @@ connection string. `DIRECT_URL` is the direct connection Prisma uses for schema
 operations; it may point to a direct PostgreSQL endpoint even when runtime
 traffic uses a pooler.
 
+Authentication uses the PostgreSQL `Session` table. Browser sessions are
+opaque random tokens; only SHA-256 token hashes are stored. The session cookie
+is HTTP-only, SameSite=Lax, and Secure in production. Mutating auth requests
+must send `X-CSRF-Token`, matching the readable `arogyanexus_csrf` cookie.
+Configure `VITE_ORIGIN` to the exact trusted frontend origin; the default is
+`http://localhost:5173` for local Vite development.
+
 ## Seed fictional demo data
 
 ```sh

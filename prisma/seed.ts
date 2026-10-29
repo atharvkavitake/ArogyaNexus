@@ -1,5 +1,7 @@
-import { PrismaClient, Role, StaffRole, AppointmentMode } from '@prisma/client';
+import { PrismaClient, $Enums } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+
+const { Role, StaffRole, AppointmentMode, AccessLevel, AccessScope } = $Enums;
 
 const prisma = new PrismaClient();
 const password = process.env.DEMO_PASSWORD || 'Pass@123';
@@ -15,7 +17,7 @@ async function user(email: string, fullName: string, role: Role, phone: string) 
 }
 
 async function doctor(email: string, fullName: string, registrationNumber: string, specialtyName: string, clinic: { name: string; address: string; city: string; lat: number; lng: number }, verified = true) {
-  const account = await user(email, fullName, Role.doctor, '+91-90000-10001');
+  const account = await user(email, fullName, Role.DOCTOR, '+91-90000-10001');
   const profile = await prisma.doctor.upsert({
     where: { userId: account.id },
     update: { registrationNumber, status: 'approved', verifiedAt: verified ? now : null },
@@ -45,7 +47,7 @@ async function doctor(email: string, fullName: string, registrationNumber: strin
 }
 
 async function main() {
-  const patientUser = await user(process.env.DEMO_PATIENT_EMAIL || 'patient@arogyanexus.test', 'Aarav Demo', Role.patient, '+91-90000-10000');
+  const patientUser = await user(process.env.DEMO_PATIENT_EMAIL || 'patient@arogyanexus.test', 'Aarav Demo', Role.PATIENT, '+91-90000-10000');
   const patient = await prisma.patient.upsert({ where: { userId: patientUser.id }, update: {}, create: { userId: patientUser.id } });
   const family = [
     { name: 'Aarav Demo', relation: 'SELF' },
@@ -53,9 +55,13 @@ async function main() {
     { name: 'Ishaan Demo', relation: 'Son' },
   ];
   for (const item of family) {
-    if (!(await prisma.profile.findFirst({ where: { patientId: patient.id, relation: item.relation } }))) {
-      await prisma.profile.create({ data: { patientId: patient.id, ...item } });
-    }
+    let profile = await prisma.profile.findFirst({ where: { patientId: patient.id, relation: item.relation } });
+    profile ??= await prisma.profile.create({ data: { patientId: patient.id, ...item } });
+    await prisma.profileAccess.upsert({
+      where: { profileId_userId: { profileId: profile.id, userId: patientUser.id } },
+      update: { level: AccessLevel.OWNER, scope: AccessScope.OWNER },
+      create: { profileId: profile.id, userId: patientUser.id, level: AccessLevel.OWNER, scope: AccessScope.OWNER },
+    });
   }
 
   const mainDoctor = await doctor('doctor@arogyanexus.test', 'Dr. Ananya Sharma', 'KA-DEMO-1001', 'Cardiology', {
@@ -67,13 +73,13 @@ async function main() {
     update: { name: 'Arogya Community Health Centre' },
     create: { clinicId: mainDoctor.clinic.id, name: 'Arogya Community Health Centre', address: '45 Fictional Health Avenue', city: 'Bengaluru' },
   });
-  const nurse = await user('nurse@arogyanexus.test', 'Nisha Demo Nurse', Role.nurse, '+91-90000-10002');
+  const nurse = await user('nurse@arogyanexus.test', 'Nisha Demo Nurse', Role.NURSE, '+91-90000-10002');
   await prisma.staffMembership.upsert({
     where: { userId_facilityId: { userId: nurse.id, facilityId: facility.id } },
     update: { role: StaffRole.NURSE, active: true },
     create: { userId: nurse.id, facilityId: facility.id, role: StaffRole.NURSE },
   });
-  const admin = await user('admin@arogyanexus.test', 'Arogya Demo Admin', Role.admin, '+91-90000-10003');
+  const admin = await user('admin@arogyanexus.test', 'Arogya Demo Admin', Role.ADMIN, '+91-90000-10003');
 
   const additional = [
     ['doctor.dermatology@arogyanexus.test', 'Dr. Kavya Rao', 'KA-DEMO-1002', 'Dermatology', 'Indiranagar Skin Clinic', 12.9719, 77.6412],
@@ -100,3 +106,4 @@ main().catch((error) => {
   console.error('Database seed failed:', error);
   process.exitCode = 1;
 }).finally(async () => prisma.$disconnect());
+

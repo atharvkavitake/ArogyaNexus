@@ -5,7 +5,7 @@ CREATE SCHEMA IF NOT EXISTS "public";
 CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('patient', 'doctor', 'nurse', 'staff', 'admin');
+CREATE TYPE "Role" AS ENUM ('PATIENT', 'DOCTOR', 'NURSE', 'LAB_TECH', 'RECEPTIONIST', 'ADMIN');
 
 -- CreateEnum
 CREATE TYPE "DoctorStatus" AS ENUM ('pending', 'approved', 'rejected');
@@ -20,7 +20,10 @@ CREATE TYPE "AppointmentMode" AS ENUM ('IN_PERSON', 'VIDEO');
 CREATE TYPE "RecordCategory" AS ENUM ('LAB_REPORT', 'PRESCRIPTION', 'IMAGING', 'DISCHARGE_SUMMARY', 'VACCINATION', 'OTHER');
 
 -- CreateEnum
-CREATE TYPE "AccessScope" AS ENUM ('PROFILE', 'RECORDS', 'APPOINTMENTS', 'FULL');
+CREATE TYPE "AccessScope" AS ENUM ('OWNER', 'PROFILE', 'RECORDS', 'APPOINTMENTS', 'FULL');
+
+-- CreateEnum
+CREATE TYPE "AccessLevel" AS ENUM ('OWNER', 'EDIT', 'VIEW', 'RECORDS');
 
 -- CreateEnum
 CREATE TYPE "VitalSource" AS ENUM ('SELF', 'DOCTOR', 'NURSE', 'DEVICE');
@@ -59,7 +62,9 @@ CREATE TABLE "users" (
     "email" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
     "phone" TEXT,
-    "role" "Role" NOT NULL DEFAULT 'patient',
+    "role" "Role" NOT NULL DEFAULT 'PATIENT',
+    "failed_login_attempts" INTEGER NOT NULL DEFAULT 0,
+    "locked_until" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -73,6 +78,8 @@ CREATE TABLE "sessions" (
     "token_hash" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
     "revoked_at" TIMESTAMP(3),
+    "user_agent" TEXT,
+    "ip_address" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -110,6 +117,7 @@ CREATE TABLE "profile_access" (
     "profile_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
     "scope" "AccessScope" NOT NULL DEFAULT 'PROFILE',
+    "level" "AccessLevel" NOT NULL DEFAULT 'VIEW',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -566,6 +574,9 @@ CREATE INDEX "sessions_expires_at_idx" ON "sessions"("expires_at");
 
 -- CreateIndex
 CREATE INDEX "sessions_revoked_at_idx" ON "sessions"("revoked_at");
+
+-- CreateIndex
+CREATE INDEX "sessions_ip_address_idx" ON "sessions"("ip_address");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "patients_user_id_key" ON "patients"("user_id");

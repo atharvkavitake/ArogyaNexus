@@ -1,12 +1,9 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
-import { registerPatientService } from '../services/auth/register-patient';
-import { registerDoctorService } from '../services/auth/register-doctor';
-import { loginService } from '../services/auth/login';
-import { logoutService } from '../services/auth/logout';
-import { createSession, getSession, SESSION_COOKIE_NAME } from '../lib/auth/session';
+import helmet from 'helmet';
+import { getSession, SESSION_COOKIE_NAME } from '../lib/auth/session';
 import { prisma } from '../lib/db/prisma';
 import { prisma as database } from '../src/db/client';
 import { z } from 'zod';
@@ -15,17 +12,8 @@ import { readRecordMultipart, detectRecordMime } from './multipart';
 import { recordPath, removeRecord, storeRecord } from './recordStorage';
 import path from 'node:path';
 import { vitalRangeStart, recordCategoryFilter } from '../lib/records/logic';
-import {
-  computeProfileCompleteness,
-  patientProfileCreateSchema,
-  patientProfilePatchSchema,
-  ProfileAccessError,
-  requireProfile,
-  softDeletePatientProfile,
-} from '../lib/patients/profileService';
-import { ensureSelfProfile } from '../lib/patients/ensureSelfProfile';
-
-dotenv.config();
+import { createAuthRouter } from './authRouter';
+import { csrfProtection } from '../src/middleware/csrf';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,14 +41,17 @@ function toPublicDoctor(profile: any) {
 }
 
 // Middlewares
+app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, true),
+    origin: process.env.VITE_ORIGIN || 'http://localhost:5173',
     credentials: true,
   })
 );
+app.use(csrfProtection);
+app.use('/api/v1/auth', createAuthRouter());
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -74,195 +65,6 @@ app.get('/api/v1/health', async (_req: Request, res: Response) => {
   } catch {
     res.status(503).json({ code: 'DATABASE_UNAVAILABLE', message: 'Database is unavailable.' });
   }
-});
-
-// Patient Registration Endpoint (Section 6)
-app.post('/api/auth/register/patient', async (req: Request, res: Response) => {
-  try {
-    const result = await registerPatientService(req.body);
-    res.status(201).json(result);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Registration failed.';
-    res.status(400).json({ success: false, error: message });
-  }
-});
-
-// Doctor Registration Endpoint (Section 7)
-app.post('/api/auth/register/doctor', async (req: Request, res: Response) => {
-  try {
-    const result = await registerDoctorService(req.body);
-    res.status(201).json(result);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Doctor registration failed.';
-    res.status(400).json({ success: false, error: message });
-  }
-});
-
-// Login Endpoint (Section 11 & 12)
-app.post('/api/auth/login', async (req: Request, res: Response) => {
-  try {
-    const result = await loginService(req.body);
-
-    // Create secure server-side session and attach signed HTTP-only cookie
-    createSession(res, result.user);
-
-    res.status(200).json({
-      success: true,
-      user: result.user,
-      doctorStatus: result.doctorStatus,
-      statusMessage: result.statusMessage,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Invalid credentials.';
-    res.status(401).json({ success: false, error: message });
-  }
-});
-
-// Logout Endpoint (Section 10)
-app.post('/api/auth/logout', (req: Request, res: Response) => {
-  try {
-    const cookie = req.cookies[SESSION_COOKIE_NAME];
-    const result = logoutService(res, cookie);
-    res.status(200).json(result);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Logout failed.';
-    res.status(500).json({ success: false, error: message });
-  }
-});
-
-// Get Current Authenticated User (Session Verification)
-app.get('/api/auth/me', (req: Request, res: Response) => {
-  const cookie = req.cookies[SESSION_COOKIE_NAME];
-  const session = getSession(cookie);
-
-  if (!session) {
-    res.status(401).json({ success: false, error: 'Not authenticated.' });
-    return;
-  }
-
-  res.status(200).json({
-    success: true,
-    user: session.user,
-  });
-});
-
-function patientProfileDto(profile: any) {
-  return {
-    id: profile.id,
-    name: profile.name,
-    relation: profile.relation,
-    dateOfBirth: profile.dateOfBirth,
-    sex: profile.sex,
-    bloodGroup: profile.bloodGroup,
-    phone: profile.phone,
-    email: profile.email,
-    allergies: profile.allergies || [],
-    conditions: profile.conditions || [],
-    allergiesConfirmed: Boolean(profile.allergiesConfirmed),
-    conditionsConfirmed: Boolean(profile.conditionsConfirmed),
-    onboardingStep: profile.onboardingStep || 1,
-    onboardedAt: profile.onboardedAt,
-    completeness: computeProfileCompleteness(profile),
-    createdAt: profile.createdAt,
-    updatedAt: profile.updatedAt,
-  };
-}
-
-function patientSession(req: Request, res: Response) {
-  const session = getSession(req.cookies[SESSION_COOKIE_NAME]);
-  if (!session) { res.status(401).json({ error: 'Authentication required.' }); return null; }
-  if (session.user.role !== 'patient') { res.status(403).json({ error: 'Patient access required.' }); return null; }
-  return session;
-}
-
-function sendProfileError(res: Response, error: unknown) {
-  if (error instanceof ProfileAccessError) { res.status(error.status).json({ error: error.message }); return; }
-  console.error('[Patient profiles] Request failed:', error);
-  res.status(500).json({ error: 'Could not process the patient profile request.' });
-}
-
-app.get('/api/patients', async (req: Request, res: Response) => {
-  const session = patientSession(req, res); if (!session) return;
-  const query = z.object({ profileId: z.string().min(1).optional() }).strict().safeParse(req.query);
-  if (!query.success) { res.status(400).json({ error: 'Invalid profile query.' }); return; }
-  try {
-    const self = await ensureSelfProfile({ id: session.user.id, full_name: session.user.full_name, email: session.user.email, phone: session.user.phone });
-    if (query.data.profileId) await requireProfile(query.data.profileId, session.user.id);
-    const patient = await prisma.patient.findUnique({ where: { userId: session.user.id } });
-    const profiles = await prisma.profile.findMany({ where: { patientId: patient.id, deletedAt: null }, orderBy: { createdAt: 'asc' } });
-    if (!profiles.some((profile: any) => profile.id === self.id)) profiles.unshift(self);
-    res.json({ profiles: profiles.map(patientProfileDto) });
-  } catch (error) { sendProfileError(res, error); }
-});
-
-app.post('/api/patients', async (req: Request, res: Response) => {
-  const session = patientSession(req, res); if (!session) return;
-  const query = z.object({ profileId: z.string().min(1).optional() }).strict().safeParse(req.query);
-  const input = patientProfileCreateSchema.safeParse(req.body);
-  if (!query.success || !input.success) { res.status(400).json({ error: 'Invalid patient profile details.', details: input.success ? undefined : input.error.flatten() }); return; }
-  try {
-    if (query.data.profileId) await requireProfile(query.data.profileId, session.user.id);
-    const self = await ensureSelfProfile({ id: session.user.id, full_name: session.user.full_name, email: session.user.email, phone: session.user.phone });
-    const patient = await prisma.patient.findUnique({ where: { userId: session.user.id } });
-    const profile = await prisma.profile.create({ data: {
-      patientId: patient.id,
-      ...input.data,
-      dateOfBirth: input.data.dateOfBirth ? new Date(input.data.dateOfBirth) : null,
-      allergies: [...new Set(input.data.allergies || [])],
-      conditions: [...new Set(input.data.conditions || [])],
-    } });
-    await prisma.profileAccess.create({ data: { profileId: profile.id, userId: session.user.id, scope: 'OWNER' } });
-    for (const field of Object.keys(input.data)) await prisma.profileChangeLog.create({ data: { profileId: profile.id, changedBy: session.user.id, field } });
-    res.status(201).json({ profile: patientProfileDto(profile), ownerProfileId: self.id });
-  } catch (error) { sendProfileError(res, error); }
-});
-
-app.get('/api/patients/:id', async (req: Request, res: Response) => {
-  const session = patientSession(req, res); if (!session) return;
-  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
-  if (!query.success || query.data.profileId !== req.params.id) { res.status(400).json({ error: 'A matching profileId is required.' }); return; }
-  try { res.json({ profile: patientProfileDto(await requireProfile(String(req.params.id), session.user.id)) }); }
-  catch (error) { sendProfileError(res, error); }
-});
-
-app.patch('/api/patients/:id', async (req: Request, res: Response) => {
-  const session = patientSession(req, res); if (!session) return;
-  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
-  const input = patientProfilePatchSchema.safeParse(req.body);
-  if (!query.success || query.data.profileId !== req.params.id || !input.success) { res.status(400).json({ error: 'Invalid patient profile update.', details: input.success ? undefined : input.error.flatten() }); return; }
-  try {
-    const current = await requireProfile(String(req.params.id), session.user.id);
-    if (input.data.relation && (String(current.relation).toUpperCase() === 'SELF' ? input.data.relation.toUpperCase() !== 'SELF' : input.data.relation.toUpperCase() === 'SELF')) {
-      res.status(400).json({ error: 'A profile relationship cannot be changed to or from Self.' }); return;
-    }
-    const data: Record<string, any> = { ...input.data };
-    if (typeof data.dateOfBirth === 'string') data.dateOfBirth = new Date(data.dateOfBirth);
-    if (data.allergies) data.allergies = [...new Set(data.allergies)];
-    if (data.conditions) data.conditions = [...new Set(data.conditions)];
-    const nextOnboardingStep = data.onboardingStep;
-    delete data.onboardingStep;
-    const changedFields = Object.keys(data).filter((field) => JSON.stringify((current as any)[field] ?? null) !== JSON.stringify(data[field] ?? null));
-    if (nextOnboardingStep !== undefined && nextOnboardingStep !== current.onboardingStep) changedFields.push('onboardingStep');
-    if (nextOnboardingStep !== undefined) data.onboardingStep = nextOnboardingStep;
-    const completesOnboarding = nextOnboardingStep === 3
-      && (data.allergiesConfirmed ?? current.allergiesConfirmed) === true
-      && (data.conditionsConfirmed ?? current.conditionsConfirmed) === true;
-    if (completesOnboarding && !current.onboardedAt) { data.onboardedAt = new Date(); changedFields.push('onboardedAt'); }
-    const updated = await prisma.profile.update({ where: { id: current.id }, data });
-    for (const field of [...new Set(changedFields)]) await prisma.profileChangeLog.create({ data: { profileId: current.id, changedBy: session.user.id, field } });
-    res.json({ profile: patientProfileDto(updated) });
-  } catch (error) { sendProfileError(res, error); }
-});
-
-app.delete('/api/patients/:id', async (req: Request, res: Response) => {
-  const session = patientSession(req, res); if (!session) return;
-  const query = z.object({ profileId: z.string().min(1) }).strict().safeParse(req.query);
-  if (!query.success || query.data.profileId !== req.params.id) { res.status(400).json({ error: 'A matching profileId is required.' }); return; }
-  try {
-    const profile = await requireProfile(String(req.params.id), session.user.id);
-    await softDeletePatientProfile(profile, session.user.id);
-    res.json({ success: true });
-  } catch (error) { sendProfileError(res, error); }
 });
 
 // Admin-only doctor application review

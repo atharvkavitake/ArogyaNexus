@@ -12,11 +12,12 @@ datasource db {
 }
 
 enum Role {
-  patient
-  doctor
-  nurse
-  staff
-  admin
+  PATIENT
+  DOCTOR
+  NURSE
+  LAB_TECH
+  RECEPTIONIST
+  ADMIN
 
   @@schema("public")
 }
@@ -68,6 +69,15 @@ enum AccessScope {
   RECORDS
   APPOINTMENTS
   FULL
+
+  @@schema("public")
+}
+
+enum AccessLevel {
+  OWNER
+  EDIT
+  VIEW
+  RECORDS
 
   @@schema("public")
 }
@@ -162,7 +172,9 @@ model User {
   email                 String             @unique
   passwordHash          String             @map("password_hash")
   phone                 String?
-  role                  Role               @default(patient)
+  role                  Role               @default(PATIENT)
+  failedLoginAttempts   Int                @default(0) @map("failed_login_attempts")
+  lockedUntil           DateTime?          @map("locked_until")
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   sessions              Session[]
@@ -193,6 +205,8 @@ model Session {
   tokenHash String    @unique @map("token_hash")
   expiresAt DateTime  @map("expires_at")
   revokedAt DateTime? @map("revoked_at")
+  userAgent String?   @map("user_agent")
+  ipAddress String?   @map("ip_address")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -200,6 +214,7 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+  @@index([ipAddress])
   @@map("sessions")
   @@schema("public")
 }
@@ -266,6 +281,7 @@ model ProfileAccess {
   profileId String      @map("profile_id") @db.Uuid
   userId    String      @map("user_id") @db.Uuid
   scope     AccessScope @default(PROFILE)
+  level     AccessLevel @default(VIEW)
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
   profile   Profile     @relation(fields: [profileId], references: [id], onDelete: Cascade)

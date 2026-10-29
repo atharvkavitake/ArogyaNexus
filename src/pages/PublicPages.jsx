@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getCsrfToken } from '../api/auth.js';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Activity, ArrowRight, BadgeCheck, Baby, Bone, Brain, CalendarDays, Check,
@@ -87,7 +88,7 @@ function BookingDialog({ doctor, user, userLoaded, onClose }) {
     setSaving(true);
     try {
       const response = await fetch('/api/appointments', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': await getCsrfToken() }, credentials: 'include',
         body: JSON.stringify({ doctorId: doctor.id, appointmentAt: new Date(appointmentAt).toISOString(), reason }),
       });
       const data = await response.json();

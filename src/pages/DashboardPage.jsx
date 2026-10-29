@@ -9,18 +9,21 @@ import {
 } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { getCurrentUser, logoutUser } from '../services/auth/authService';
+import { getCsrfToken } from '../api/auth.js';
 import '../styles/dashboard.css';
 import DoctorSidebar from '../components/doctor/DoctorSidebar';
 
 const dashboardPaths = {
   patient: '/patient/dashboard',
   doctor: '/doctor/dashboard',
+  staff: '/staff/dashboard',
   admin: '/admin/dashboard',
 };
 
 const roleLabels = {
   patient: 'Patient',
   doctor: 'Doctor',
+  staff: 'Clinical staff',
   admin: 'Administrator',
 };
 
@@ -74,7 +77,7 @@ export default function DashboardPage({ role }) {
     try {
       const response = await fetch(`/api/admin/doctor-applications/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': await getCsrfToken() },
         credentials: 'include',
         body: JSON.stringify({ status }),
       });
