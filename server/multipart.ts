@@ -29,9 +29,12 @@ export async function readRecordMultipart(req: Request): Promise<MultipartResult
   return { fields, file };
 }
 
-export function detectRecordMime(bytes: Buffer): { mimeType: 'application/pdf' | 'image/jpeg' | 'image/png'; extension: 'pdf' | 'jpg' | 'png' } | null {
-  if (bytes.length >= 5 && bytes.subarray(0, 5).toString('ascii') === '%PDF-') return { mimeType: 'application/pdf', extension: 'pdf' };
+export function detectRecordMime(bytes: Buffer, filename: string = ''): { mimeType: 'application/pdf' | 'image/jpeg' | 'image/png'; extension: 'pdf' | 'jpg' | 'png' } | null {
+  if (bytes.length >= 5 && bytes.subarray(0, 1024).includes(Buffer.from('%PDF-'))) return { mimeType: 'application/pdf', extension: 'pdf' };
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mimeType: 'image/jpeg', extension: 'jpg' };
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { mimeType: 'image/png', extension: 'png' };
+  if (/\.jpe?g$/i.test(filename)) return { mimeType: 'image/jpeg', extension: 'jpg' };
+  if (/\.png$/i.test(filename)) return { mimeType: 'image/png', extension: 'png' };
+  if (/\.pdf$/i.test(filename)) return { mimeType: 'application/pdf', extension: 'pdf' };
   return null;
 }

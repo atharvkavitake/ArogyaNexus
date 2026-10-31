@@ -50,8 +50,17 @@ model DoctorProfile {
   verified Boolean @default(false)
   clinic_lat Float?
   clinic_lng Float?
+  experience_years Int?
+  languages String[] @default([])
+  bio String?
+  offers_video Boolean @default(true)
+  rating_avg Float @default(0)
+  rating_count Int @default(0)
   health_records HealthRecord[]
+  assigned_record_reviews HealthRecord[] @relation("AssignedDoctorReviews")
+  completed_record_reviews HealthRecord[] @relation("CompletedDoctorReviews")
   access_logs AccessLog[]
+  visit_records VisitRecord[]
 
   @@index([user_id])
   @@index([status])
@@ -73,6 +82,13 @@ model Appointment {
   cancel_reason     String?
   notes             String?
   seed_key          String? @unique
+  token_number      Int?
+  checked_in_at     DateTime?
+  check_in_vitals   Json?
+  missed_alert_sent_at DateTime?
+  proposed_starts_at DateTime?
+  cancelled_by      String?
+  updated_at        DateTime @default(now()) @updatedAt
 
   patient User @relation(fields: [patient_id], references: [id], onDelete: Cascade)
   doctor  DoctorProfile @relation(fields: [doctor_profile_id], references: [id], onDelete: Cascade)
@@ -91,6 +107,22 @@ model Profile {
   relation String @default("SELF")
   seed_key String? @unique
   allergies String[] @default([])
+  dob DateTime?
+  gender String?
+  blood_group String?
+  phone String?
+  height_cm Float?
+  weight_kg Float?
+  emergency_name String?
+  emergency_phone String?
+  emergency_relation String?
+  allergies_confirmed Boolean @default(false)
+  onboarding_step Int @default(0)
+  onboarded_at DateTime?
+  deleted_at DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   appointments Appointment[]
   access ProfileAccess[]
@@ -98,6 +130,8 @@ model Profile {
   vital_readings VitalReading[]
   conditions PatientCondition[]
   access_logs AccessLog[]
+  visit_records VisitRecord[]
+
   @@index([user_id])
   @@map("profiles")
 }
@@ -116,15 +150,35 @@ model HealthRecord {
   file_name String
   mime_type String
   size_bytes Int
+  tags String[] @default([])
   created_at DateTime @default(now())
   deleted_at DateTime?
   seed_key String? @unique
+
+  // Document Verification Fields
+  verification_status   String    @default("PENDING") // PENDING, AI_VERIFIED, DOCTOR_REVIEW_REQUIRED, DOCTOR_REVIEW_PENDING, DOCTOR_VERIFIED, REJECTED
+  verification_method   String?   // 'AI' | 'DOCTOR'
+  ai_confidence         Float?
+  ai_extracted_fields   Json?     // { patientName, issuer, recordDate, documentType, summary }
+  ai_verified_at        DateTime?
+  review_requested_at   DateTime?
+  assigned_doctor_id    String?
+  reviewed_by_doctor_id String?
+  doctor_reviewed_at    DateTime?
+  rejection_reason      String?
+  doctor_review_notes   String?
+
   patient Profile @relation(fields: [patient_id], references: [id], onDelete: Cascade)
   doctor DoctorProfile? @relation(fields: [doctor_id], references: [id], onDelete: SetNull)
+  assigned_doctor DoctorProfile? @relation("AssignedDoctorReviews", fields: [assigned_doctor_id], references: [id], onDelete: SetNull)
+  reviewed_by_doctor DoctorProfile? @relation("CompletedDoctorReviews", fields: [reviewed_by_doctor_id], references: [id], onDelete: SetNull)
   uploader User @relation(fields: [uploaded_by], references: [id], onDelete: Cascade)
   access_logs AccessLog[]
+
   @@index([patient_id, record_date])
   @@index([patient_id, category, record_date])
+  @@index([patient_id, verification_status])
+  @@index([assigned_doctor_id, verification_status])
   @@map("health_records")
 }
 
@@ -174,6 +228,7 @@ model ProfileAccess {
   id String @id @default(uuid())
   profile_id String
   user_id String
+  level String @default("OWNER")
   profile Profile @relation(fields: [profile_id], references: [id], onDelete: Cascade)
   @@unique([profile_id, user_id])
   @@map("profile_access")
@@ -184,6 +239,20 @@ model VisitRecord {
   appointment_id String @unique
   prescription_file_key String?
   report_file_key String?
+  profile_id String?
+  doctor_profile_id String?
+  diagnosis String?
+  notes String?
+  tests_advised String?
+  follow_up_date DateTime?
+  finalized_at DateTime?
+  created_at DateTime @default(now())
+
   appointment Appointment @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  profile Profile? @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  doctor DoctorProfile? @relation(fields: [doctor_profile_id], references: [id], onDelete: Cascade)
+
+  @@index([profile_id])
+  @@index([doctor_profile_id])
   @@map("visit_records")
 }

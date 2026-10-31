@@ -3,3 +3,39 @@
 @media(max-width:767px){.records-toolbar{align-items:flex-start;flex-direction:column}.records-toolbar>.patient-button{align-self:flex-end}.records-tabs{width:100%;gap:19px;padding-bottom:2px}.records-tabs button{font-size:11px}.records-layout{grid-template-columns:1fr}.records-side-column{grid-row:2}.vitals-grid{gap:5px}.vital-tile h3{font-size:9px}.records-filters{flex-wrap:wrap}.record-search{flex-basis:100%}.date-filter{flex:1}.date-filter input{width:100%;min-width:0}.clinical-record-row{gap:7px}.record-title-line>strong{font-size:10px}.records-side-column{gap:11px}}
 @media(max-width:420px){.patient-records-page{padding-right:10px;padding-left:10px}.records-toolbar>.patient-button{min-height:32px}.records-tabs{gap:16px}.vitals-grid{grid-template-columns:1fr;gap:12px}.vital-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 7px}.vital-tile h3{grid-column:1;margin:0;font-size:10px}.vital-tile>strong{grid-column:1;grid-row:2;font-size:18px}.vital-sparkline{grid-column:2;grid-row:1 / span 2;width:115px;height:34px;margin:0}.vital-empty{grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;min-height:auto}.records-filters{gap:5px}.date-filter{display:grid;align-content:start;flex:1}.record-actions>.patient-button{padding:0 7px}.record-download,.record-delete{width:26px;height:27px}.record-file-icon{width:29px;height:29px}.record-owner-line>.patient-status{max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.record-modal{padding:15px}.condition-edit-row{grid-template-columns:minmax(0,1fr) 96px 26px}}
 .record-doctor-photo{width:24px;height:24px;flex:0 0 auto;border:1px solid #d4e6e5;border-radius:50%;object-fit:cover}.access-entry>.record-doctor-photo{position:relative;z-index:1;width:30px;height:30px;border:2px solid #fff}
+
+/* Vital Readings History */
+.vitals-history-card { margin-top: 5px; }
+.vitals-history-list { display: grid; gap: 0; }
+.vitals-history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e8eeee; min-width: 0; }
+.vitals-history-row:last-child { border-bottom: none; }
+.vitals-history-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vital-indicator-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; background: #18877b; }
+.vital-indicator-dot.blood_sugar_fasting { background: #55ac87; }
+.vital-indicator-dot.blood_pressure { background: #177c76; }
+.vital-indicator-dot.cholesterol_total { background: #2c8787; }
+.vital-indicator-dot.heart_rate { background: #e06d6d; }
+.vital-indicator-dot.weight { background: #e09641; }
+.vitals-history-title-group { display: grid; gap: 2px; min-width: 0; }
+.vitals-history-title-group strong { font-size: 11px; color: #22373d; font-weight: 650; }
+.vitals-history-title-group time { font-size: 9px; color: #708288; }
+.vitals-history-value-group { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.vitals-history-value { font-size: 13px; font-weight: 700; color: #162c33; }
+.vitals-history-value small { font-size: 10px; font-weight: 500; color: #586d74; }
+.vitals-history-badge { padding: 2px 7px; border-radius: 6px; background: #edf4f3; color: #1c726a; font-size: 9px; font-weight: 600; }
+.vitals-history-empty { padding: 14px 0; }
+
+/* Conditions & Notes Section */
+.conditions-section-block { margin-bottom: 14px; }
+.conditions-section-title { margin: 0 0 8px; font-size: 11px; font-weight: 700; color: #2c444c; text-transform: uppercase; letter-spacing: 0.4px; }
+.condition-info { display: grid; gap: 2px; }
+.condition-name { font-weight: 600; color: #22383f; }
+.condition-note-snippet { font-size: 10px; color: #64777e; font-style: italic; }
+.allergy-list-section { margin-bottom: 14px; }
+.conditions-notes-section { padding-top: 10px; border-top: 1px solid #e8eeee; }
+.condition-notes-text { margin: 0; padding: 10px 12px; border-radius: 8px; background: #f8fafb; border: 1px solid #e3eceb; font-size: 11px; color: #32474e; line-height: 1.5; white-space: pre-wrap; }
+.condition-notes-empty { margin: 0; font-size: 11px; color: #71848a; line-height: 1.45; }
+.record-textarea { width: 100%; min-height: 70px; padding: 8px 10px; border: 1px solid #cbd9da; border-radius: 7px; color: #263b42; background: white; font: inherit; font-size: 11px; resize: vertical; }
+.record-textarea:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 1px; }
+.record-preview-modal { width: min(100%, 860px) !important; max-height: 94vh !important; }
+

@@ -87,5 +87,21 @@ function to24Hour(label) {
 }
 
 function AppointmentSuccess({ appointment, doctor, date, slot, profile }) {
-  return <Card className="booking-success-card"><span className="booking-success-icon"><CheckCircle2 size={27} /></span><p className="patient-kicker">REQUEST RECEIVED</p><h2>Appointment request sent</h2><p>Your request for {profile.name} has been sent to {doctor.user.full_name}. The clinic will confirm your appointment.</p><div className="booking-success-summary"><span><CalendarDays size={16} /> {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}</span><span><Clock3 size={16} /> {slot}</span><StatusChip status={appointment.status} /></div><Link className="patient-button primary" to="/patient/dashboard">Return to dashboard</Link></Card>;
+  return (
+    <Card className="booking-success-card">
+      <span className="booking-success-icon"><CheckCircle2 size={27} /></span>
+      <p className="patient-kicker">REQUEST RECEIVED</p>
+      <h2>Appointment request sent</h2>
+      <p>Your request for {profile.name} has been sent to {doctor.user.full_name}. The clinic will confirm your appointment.</p>
+      <div className="booking-success-summary">
+        <span><CalendarDays size={16} /> {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        <span><Clock3 size={16} /> {slot}</span>
+        <StatusChip status={appointment.status} />
+      </div>
+      <div className="booking-success-actions" style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Link className="patient-button primary" to="/patient/appointments">View All Appointments</Link>
+        <Link className="patient-button secondary" to="/patient/dashboard">Return to dashboard</Link>
+      </div>
+    </Card>
+  );
 }

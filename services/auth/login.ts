@@ -25,12 +25,10 @@ export async function loginService(input: LoginInput): Promise<LoginResult> {
   const { email, password } = validation.data;
   const normalizedEmail = email.toLowerCase().trim();
 
-  // 2. Query user from PostgreSQL with doctor_profile
+  // 2. Query the user first. Fetching the doctor profile separately keeps
+  // login compatible with clients generated under either relation name.
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
-    include: {
-      doctor_profile: true,
-    },
   });
 
   // Generic message prevents user enumeration attacks
@@ -44,6 +42,10 @@ export async function loginService(input: LoginInput): Promise<LoginResult> {
     throw new Error('Invalid email or password.');
   }
 
+  const doctorProfile = (user as any).doctor_profile ?? (user.role === 'doctor'
+    ? await prisma.doctorProfile.findUnique({ where: { user_id: user.id } })
+    : null);
+
   // 4. Construct safe user payload
   const safeUser: SessionUser = {
     id: user.id,
@@ -51,15 +53,15 @@ export async function loginService(input: LoginInput): Promise<LoginResult> {
     email: user.email,
     phone: user.phone,
     role: user.role as 'patient' | 'doctor' | 'admin',
-    doctor_profile: user.doctor_profile
+    doctor_profile: doctorProfile
       ? {
-          id: user.doctor_profile.id,
-          speciality: user.doctor_profile.speciality,
-          registration_number: user.doctor_profile.registration_number,
-          clinic_name: user.doctor_profile.clinic_name,
-          clinic_address: user.doctor_profile.clinic_address,
-          consultation_fee: Number(user.doctor_profile.consultation_fee),
-          status: user.doctor_profile.status as 'pending' | 'approved' | 'rejected',
+          id: doctorProfile.id,
+          speciality: doctorProfile.speciality,
+          registration_number: doctorProfile.registration_number,
+          clinic_name: doctorProfile.clinic_name,
+          clinic_address: doctorProfile.clinic_address,
+          consultation_fee: Number(doctorProfile.consultation_fee),
+          status: doctorProfile.status as 'pending' | 'approved' | 'rejected',
         }
       : null,
   };
@@ -68,8 +70,8 @@ export async function loginService(input: LoginInput): Promise<LoginResult> {
   let doctorStatus: 'pending' | 'approved' | 'rejected' | undefined = undefined;
   let statusMessage: string | undefined = undefined;
 
-  if (user.role === 'doctor' && user.doctor_profile) {
-    doctorStatus = user.doctor_profile.status as 'pending' | 'approved' | 'rejected';
+  if (user.role === 'doctor' && doctorProfile) {
+    doctorStatus = doctorProfile.status as 'pending' | 'approved' | 'rejected';
 
     if (doctorStatus === 'pending') {
       statusMessage = 'Your doctor account is pending admin approval.';

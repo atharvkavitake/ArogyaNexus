@@ -48,7 +48,7 @@ export default function PatientRegisterPage({ onToast }) {
 
     if (!formData.phoneNumber.trim()) {
       errs.phoneNumber = 'Please enter your phone number.';
-    } else if (!/^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/.test(formData.phoneNumber.trim())) {
+    } else if (!/^[+]?\d[\d\s().-]{5,23}\d$/.test(formData.phoneNumber.trim())) {
       errs.phoneNumber = 'Please enter a valid phone number (e.g., +1 234-567-8900).';
     }
 
@@ -56,6 +56,12 @@ export default function PatientRegisterPage({ onToast }) {
       errs.password = 'Please enter your password.';
     } else if (formData.password.length < 8) {
       errs.password = 'Password must be at least 8 characters.';
+    } else if (!/[A-Z]/.test(formData.password)) {
+      errs.password = 'Password must contain at least one uppercase letter.';
+    } else if (!/[0-9]/.test(formData.password)) {
+      errs.password = 'Password must contain at least one number.';
+    } else if (!/[^A-Za-z0-9]/.test(formData.password)) {
+      errs.password = 'Password must contain at least one special character.';
     }
 
     if (!formData.confirmPassword) {

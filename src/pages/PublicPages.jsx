@@ -8,7 +8,7 @@ import {
 import { getCurrentUser, getRedirectPathForUser, logoutUser } from '../services/auth/authService';
 import '../styles/public.css';
 
-const CITIES = ['Kolhapur', 'Pune', 'Mumbai', 'Bengaluru', 'Nashik', 'Sangli', 'Satara'];
+const CITIES = ['Kolhapur', 'Sangli', 'Satara', 'Pune', 'Mumbai', 'Nashik', 'Solapur', 'Bengaluru'];
 const SPECIALITIES = [
   { name: 'Cardiology', Icon: HeartPulse }, { name: 'Orthopedic', Icon: Bone },
   { name: 'Dermatology', Icon: Sparkles }, { name: 'Neurology', Icon: Brain },

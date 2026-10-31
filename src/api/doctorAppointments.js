@@ -22,7 +22,28 @@ const dateKey = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kol
 const nextToken = (startsAt) => Math.max(0, ...appointmentStore.filter((appointment) => dateKey(appointment.startsAt) === dateKey(startsAt)).map((appointment) => Number(appointment.tokenNumber) || 0)) + 1;
 const failResult = (code, message) => ({ code, message });
 
+export async function syncLiveAppointments() {
+  try {
+    const res = await fetch('/api/doctor/appointments', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.appointments)) {
+        appointmentStore.length = 0;
+        for (const liveApt of data.appointments) {
+          appointmentStore.push({
+            tokenNumber: Number(liveApt.tokenNumber) || nextToken(liveApt.startsAt),
+            ...liveApt,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[DoctorAppointments] Live sync error:', err);
+  }
+}
+
 export async function getDoctorAppointments({ tab = 'today', q = '', filter = 'All' } = {}) {
+  await syncLiveAppointments();
   await delay();
   const params = new URLSearchParams(globalThis.window?.location?.search || '');
   if (params.get('mock') === 'error') throw new Error('Could not load appointments.');
@@ -30,27 +51,65 @@ export async function getDoctorAppointments({ tab = 'today', q = '', filter = 'A
   const todayKey = dateKey(new Date());
   const visible = appointmentStore.filter((appointment) => {
     const appointmentDay = dateKey(appointment.startsAt);
-    if (tab === 'today' && (appointmentDay !== todayKey || ['CANCELLED', 'REQUESTED', 'PROPOSED_NEW_TIME'].includes(appointment.status) || (appointment.status === 'COMPLETED' && filter !== 'Completed'))) return false;
-    if (tab === 'upcoming' && (appointmentDay === todayKey || ['REQUESTED', 'PROPOSED_NEW_TIME', 'CANCELLED'].includes(appointment.status))) return false;
-    if (tab === 'requests' && !['REQUESTED', 'PROPOSED_NEW_TIME'].includes(appointment.status)) return false;
+    if (tab === 'today') {
+      if (appointmentDay !== todayKey) return false;
+      if (['CANCELLED', 'REQUESTED', 'PROPOSED_NEW_TIME'].includes(appointment.status)) return false;
+      if (appointment.status === 'COMPLETED' && filter !== 'Completed') return false;
+    }
+    if (tab === 'upcoming') {
+      if (appointmentDay <= todayKey) return false;
+      if (['REQUESTED', 'PROPOSED_NEW_TIME', 'CANCELLED'].includes(appointment.status)) return false;
+    }
+    if (tab === 'requests') {
+      if (!['REQUESTED', 'PROPOSED_NEW_TIME'].includes(appointment.status)) return false;
+    }
     if (filter !== 'All') {
       const filterValue = filter.toLowerCase().replace('in-person', 'in_person').replace('video call', 'video').replace('in waiting', 'waiting').replace('missed', 'missed');
       if (!`${appointment.mode} ${appointment.status}`.toLowerCase().includes(filterValue)) return false;
     }
-    return `${appointment.patient.name} ${appointment.reason} ${appointment.status} ${appointment.mode}`.toLowerCase().includes(q.toLowerCase());
+    return `${appointment.patient?.name || ''} ${appointment.reason || ''} ${appointment.status || ''} ${appointment.mode || ''}`.toLowerCase().includes(q.toLowerCase());
   });
   visible.sort((a, b) => tab === 'requests' ? new Date(a.createdAt) - new Date(b.createdAt) : tab === 'today' ? (a.status === 'WAITING' ? -1 : b.status === 'WAITING' ? 1 : a.tokenNumber - b.tokenNumber) : new Date(a.startsAt) - new Date(b.startsAt));
   return clone(visible);
 }
 
-export async function getAppointment(id) { await delay(); return clone(getById(id) || null); }
+export async function getAppointment(id) {
+  await delay();
+  let found = getById(id);
+  if (!found) {
+    try {
+      await syncLiveAppointments();
+      found = getById(id);
+    } catch {}
+  }
+  return clone(found || null);
+}
+
+export async function getDoctorPatientRecords(patientId, appointmentId = '') {
+  try {
+    const params = new URLSearchParams();
+    if (appointmentId) params.append('appointmentId', appointmentId);
+    const res = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/records?${params.toString()}`, {
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
+    }
+    throw new Error(data.error || 'Could not load patient medical records.');
+  } catch (err) {
+    console.error('[DoctorAppointments] getDoctorPatientRecords error:', err);
+    throw err;
+  }
+}
 
 export async function getDoctorAppointmentCounts() {
+  await syncLiveAppointments();
   await delay();
   const todayKey = dateKey(new Date());
   return {
     today: appointmentStore.filter((appointment) => dateKey(appointment.startsAt) === todayKey && !['CANCELLED', 'REQUESTED', 'PROPOSED_NEW_TIME', 'COMPLETED'].includes(appointment.status)).length,
-    upcoming: appointmentStore.filter((appointment) => dateKey(appointment.startsAt) !== todayKey && !['REQUESTED', 'PROPOSED_NEW_TIME', 'CANCELLED'].includes(appointment.status)).length,
+    upcoming: appointmentStore.filter((appointment) => dateKey(appointment.startsAt) > todayKey && !['REQUESTED', 'PROPOSED_NEW_TIME', 'CANCELLED'].includes(appointment.status)).length,
     requests: appointmentStore.filter((appointment) => ['REQUESTED', 'PROPOSED_NEW_TIME'].includes(appointment.status)).length,
   };
 }
@@ -63,6 +122,14 @@ export async function updateAppointmentStatus(id, nextStatus, payload = {}) {
   Object.assign(appointment, payload, { status: nextStatus, updatedAt: new Date().toISOString() });
   recordAudit(`STATUS_${nextStatus}`, id);
   if (nextStatus === 'CANCELLED') patientNotifications.push({ patientId: appointment.patient.id, appointmentId: id, type: 'APPOINTMENT_CANCELLED', at: new Date().toISOString(), message: payload.reason || 'Your appointment request was declined.' });
+  try {
+    await fetch(`/api/doctor/appointments/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ nextStatus }),
+    });
+  } catch {}
   return clone(appointment);
 }
 
@@ -110,6 +177,14 @@ export async function respondToRequest(id, response, payload = {}) {
     appointment.status = 'CONFIRMED';
     appointment.tokenNumber = nextToken(appointment.startsAt);
     recordAudit('REQUEST_ACCEPTED', id);
+    try {
+      await fetch(`/api/doctor/appointments/${id}/respond`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ response: 'ACCEPT' }),
+      });
+    } catch {}
   } else if (response === 'DECLINE') {
     if (!payload.reason?.trim() || payload.reason.trim().length < 5) return failResult('INVALID_REASON', 'Please enter a reason with at least 5 characters.');
     appointment.status = 'CANCELLED';
@@ -117,11 +192,27 @@ export async function respondToRequest(id, response, payload = {}) {
     appointment.cancellationReason = payload.reason.trim();
     patientNotifications.push({ patientId: appointment.patient.id, appointmentId: id, type: 'APPOINTMENT_DECLINED', reason: appointment.cancellationReason, at: new Date().toISOString() });
     recordAudit('REQUEST_DECLINED', id);
+    try {
+      await fetch(`/api/doctor/appointments/${id}/respond`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ response: 'DECLINE', reason: payload.reason.trim() }),
+      });
+    } catch {}
   } else if (response === 'PROPOSE') {
     if (!payload.proposedStartsAt || new Date(payload.proposedStartsAt) <= new Date()) return failResult('INVALID_SLOT', 'Choose a future appointment time.');
     appointment.status = 'PROPOSED_NEW_TIME';
     appointment.proposedSlot = { startsAt: new Date(payload.proposedStartsAt).toISOString(), note: payload.note?.trim() || '' };
     recordAudit('REQUEST_TIME_PROPOSED', id);
+    try {
+      await fetch(`/api/doctor/appointments/${id}/respond`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ response: 'PROPOSE', proposedStartsAt: payload.proposedStartsAt, note: payload.note }),
+      });
+    } catch {}
   } else return failResult('INVALID_RESPONSE', 'Unknown response.');
   appointment.updatedAt = new Date().toISOString();
   return clone(appointment);
@@ -148,19 +239,57 @@ export async function createAppointment(data) {
   if (new Date(data.startsAt) <= new Date()) return failResult('PAST_SLOT', 'Choose a future time.');
   const end = data.endsAt || new Date(new Date(data.startsAt).getTime() + 30 * 60000).toISOString();
   if (appointmentStore.some((item) => item.status !== 'CANCELLED' && new Date(item.startsAt) < new Date(end) && new Date(item.endsAt) > new Date(data.startsAt))) return failResult('SLOT_TAKEN', 'That time is no longer available.');
+
+  try {
+    const res = await fetch('/api/doctor/appointments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        patient: data.patient,
+        startsAt: data.startsAt,
+        reason: data.reason,
+        mode: data.mode || 'IN_PERSON',
+      }),
+    });
+    if (res.ok) {
+      await syncLiveAppointments();
+      const created = appointmentStore.find((a) => a.reason === data.reason.trim());
+      if (created) return clone(created);
+    }
+  } catch (err) {
+    console.warn('[DoctorAppointments] Server create error, saving in local store:', err);
+  }
+
   const appointment = { id: `appt-${crypto.randomUUID()}`, tokenNumber: nextToken(data.startsAt), status: 'SCHEDULED', mode: data.mode || 'IN_PERSON', startsAt: new Date(data.startsAt).toISOString(), endsAt: new Date(end).toISOString(), checkedInAt: null, reason: data.reason.trim(), doctorNotes: '', patient: clone(data.patient), checkInVitals: null, consent: null, missedAlertSentAt: null, createdAt: new Date().toISOString() };
   appointmentStore.push(appointment);
   recordAudit('APPOINTMENT_CREATED', appointment.id);
   return clone(appointment);
 }
 
-const treatedPatients = Array.from({ length: 20 }, (_, index) => {
-  const source = appointmentStore[index % appointmentStore.length].patient;
-  return { ...clone(source), id: `${source.id}-treated-${index}`, name: index < appointmentStore.length ? source.name : `Patient ${index + 1}`, lastVisit: new Date(Date.now() - (index + 1) * 86400000).toISOString() };
-});
+export async function getAiClinicalSummary(appointmentId) {
+  try {
+    const res = await fetch(`/api/doctor/appointments/${encodeURIComponent(appointmentId)}/ai-summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Could not generate AI clinical summary.');
+    }
+    return data.summary;
+  } catch (err) {
+    console.error('[DoctorAppointments] getAiClinicalSummary error:', err);
+    throw err;
+  }
+}
+
 export async function searchMyPatients(q = '') {
   await delay();
-  return clone(treatedPatients.filter((patient) => patient.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8));
+  const treated = appointmentStore.map((item) => item.patient).filter(Boolean);
+  const unique = Array.from(new Map(treated.map((p) => [p.name, p])).values());
+  return clone(unique.filter((patient) => patient.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8));
 }
 
 export async function invitePatientByPhone(phone, name) {

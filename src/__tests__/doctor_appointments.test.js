@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { actionSet, hasRecordAccess, isJoinWindowOpen, waitingMinutes } from '../pages/doctor/Appointments';
-import { getDoctorAppointments } from '../api/doctorAppointments';
+import { getDoctorAppointments, appointmentStore } from '../api/doctorAppointments';
 
 const now = new Date('2026-10-28T10:00:00Z');
 describe('doctor appointment display rules', () => {
@@ -26,6 +26,11 @@ describe('doctor appointment display rules', () => {
     expect(waitingMinutes({ checkedInAt: new Date(now.getTime() + 60000) }, now)).toBe(0);
   });
   it('filters list results by tab, search, and quick filter', async () => {
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    appointmentStore.push(
+      { id: 'test-req', status: 'REQUESTED', mode: 'VIDEO', startsAt: `${todayStr}T10:00:00.000Z`, patient: { name: 'Req Patient' }, reason: 'Consult', createdAt: new Date().toISOString() },
+      { id: 'test-arjun', status: 'WAITING', mode: 'VIDEO', startsAt: `${todayStr}T11:00:00.000Z`, patient: { name: 'Arjun Sharma' }, reason: 'ECG Review', createdAt: new Date().toISOString() },
+    );
     const requests = await getDoctorAppointments({ tab: 'requests' });
     expect(requests.every((item) => item.status === 'REQUESTED')).toBe(true);
     const search = await getDoctorAppointments({ tab: 'today', q: 'Arjun' });

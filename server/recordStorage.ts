@@ -10,7 +10,7 @@ export async function storeRecord(bytes: Buffer, extension: string): Promise<str
   return key;
 }
 export function recordPath(key: string): string {
-  if (!/^[0-9a-f-]{36}\.(pdf|jpg|png)$/.test(key)) throw new Error('Invalid private file key.');
+  if (!/^[0-9a-f-]{36}\.(pdf|jpg|jpeg|png)$/i.test(key)) throw new Error('Invalid private file key.');
   return path.join(storageRoot, key);
 }
 export async function removeRecord(key: string): Promise<void> {

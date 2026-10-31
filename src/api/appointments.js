@@ -5,8 +5,26 @@ async function request(path, options = {}) {
   return payload;
 }
 const query = (values) => new URLSearchParams(values).toString();
-export async function getAppointments(profileId, tab) { return (await request(`/api/patient/appointments?${query({ profileId, tab })}`)).appointments; }
-export async function getAppointmentCalendar(profileId, month) { return (await request(`/api/patient/appointments/calendar?${query({ profileId, month })}`)).dates; }
-export async function getPastSummary(profileId) { return (await request(`/api/patient/appointments/past-summary?${query({ profileId, limit: 5 })}`)).visits; }
+export async function getAppointments(profileId, tab) {
+  const res = await request(`/api/patient/appointments?${query({ profileId, tab })}`);
+  return res.appointments || [];
+}
+export async function getAppointmentCalendar(profileId, month) {
+  try {
+    const res = await request(`/api/patient/appointments/calendar?${query({ profileId, month })}`);
+    return res.dates || [];
+  } catch {
+    return [];
+  }
+}
+export async function getPastSummary(profileId) {
+  try {
+    const res = await request(`/api/patient/appointments/past-summary?${query({ profileId, limit: 5 })}`);
+    return res.visits || [];
+  } catch {
+    return [];
+  }
+}
 export async function cancelAppointment(id, profileId, reason) { return request(`/api/patient/appointments/${id}/cancel?${query({ profileId })}`, { method: 'PATCH', body: JSON.stringify({ reason }) }); }
 export async function modifyAppointment(id, profileId, reason) { return request(`/api/patient/appointments/${id}?${query({ profileId })}`, { method: 'PATCH', body: JSON.stringify({ reason }) }); }
+
